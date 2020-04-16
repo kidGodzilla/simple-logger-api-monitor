@@ -17,7 +17,8 @@
     "visualization",
     "monitor",
     "logger",
-    "simple"
+    "simple",
+    "Express"
   ],
   "author": "James Futhey <futhey@gmail.com> (http://jamesfuthey.com/)",
   "license": "ISC",
