@@ -27,6 +27,18 @@ This will add a new global, `global.slamCounts`, and two new routes: `GET /slamC
 You do not need to monitor your app to use this page. Simply visit the `/monitor` route of your application to view usage statistics for your app API routes. Detailed statistics are kept for 2 hours. Data is purged each time your app restarts. Clustering is supported.
 
 
+## Advanced
+
+Currently, you can pass an environment variable `HOSTNAME` to set the hostname of your apis (optional).
+
+
+## Todos
+
+ * Make the monitoring page configurable
+   * Custom title
+   * Custom route
+
+
 ## Issues
 
 The intent is for this to remain very simple and easy to use, so the scope of features is intentionally small.
