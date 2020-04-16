@@ -1,0 +1,28 @@
+{
+  "name": "simple-logger-api-monitor",
+  "version": "0.7.5",
+  "description": "Visualize requests over time, with average response times and error rates",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kidGodzilla/simple-logger-api-monitor.git"
+  },
+  "keywords": [
+    "api",
+    "metrics",
+    "performance",
+    "visualization",
+    "monitor",
+    "logger",
+    "simple"
+  ],
+  "author": "James Futhey <futhey@gmail.com> (http://jamesfuthey.com/)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kidGodzilla/simple-logger-api-monitor/issues"
+  },
+  "homepage": "https://github.com/kidGodzilla/simple-logger-api-monitor#readme"
+}
