@@ -1,4 +1,4 @@
-# Simple Logger / API Monitor (SLAM) for Express
+# 📈 Simple Logger / API Monitor (SLAM) for Express
 
 Add an API monitoring page to your Express app in 3 seconds. Visualizes requests over time, with average response times and error rates.
 
