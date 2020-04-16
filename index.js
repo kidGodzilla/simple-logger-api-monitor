@@ -1,7 +1,9 @@
+/**
+ * Simple Logger / API Monitor (SLAM) for Express
+ */
 module.exports = function (app) {
-    /**
-     * Simple Logger / API Monitor
-     */
+
+    // Middleware
     app.use(function (req, res, next) {
         if (!global.slamCounts) global.slamCounts = {};
 
