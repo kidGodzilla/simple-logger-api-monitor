@@ -1,6 +1,6 @@
 {
   "name": "simple-logger-api-monitor",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "description": "Visualize requests over time, with average response times and error rates",
   "main": "index.js",
   "scripts": {
