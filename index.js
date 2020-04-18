@@ -5,13 +5,20 @@ module.exports = function (app) {
 
     // Middleware
     app.use(function (req, res, next) {
-        if (!global.slamCounts) global.slamCounts = {};
+        if (!global.slamCounts) global.slamCounts = {}; // Create if not exists
 
         try {
+            // Todo: make these env variables
+            const console_logging_enabled = false;
+            const log_long_requests = true;
+            const long_req = 5000;
 
-            var console_logging_enabled = false;
-            var process = require('process');
-            var os = require('os');
+            // Setup
+            const process = require('process');
+            const time = process.hrtime();
+            const os = require('os');
+            const NS_PER_SEC = 1e9;
+            const NS_TO_MS = 1e6;
 
             function uuidv4 () {
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -26,46 +33,63 @@ module.exports = function (app) {
                 return route ? `${ baseUrl === '/' ? '' : baseUrl }${ route }` : 'unknown route'
             }
 
-            function segmentToTs (seg) {
-                return seg * (1000 * 60 * 5);
-            }
-
             function tsToSegment (ts) {
                 if (!ts) ts = + new Date();
                 return Math.floor(ts / (1000 * 60 * 5));
             }
 
-            const time = process.hrtime();
-            res.slam = { uuid: uuidv4(), timestamp: (+ new Date()), timeSegment: tsToSegment() };
-            const NS_PER_SEC = 1e9;
-            const NS_TO_MS = 1e6;
+            function segmentToTs (seg) {
+                return seg * (1000 * 60 * 5);
+            }
 
+            res.slam = { uuid: uuidv4(), timestamp: (+ new Date()), timeSegment: tsToSegment() };
             res.slam.hostname = process.env.SLAM_HOSTNAME || process.env.HOSTNAME || os.hostname();
 
-            // Todo: CPU Usage, Memory Usage, Avg. Response Time, Requests per second, etc.
-
-            function log (obj) {
+            function log () {
                 if (res.slam && res.slam.logged) return;
+                if (res.slam) res.slam.logged = true;
+                var obj = res.slam;
 
+                // Check request duration
+                const diff = process.hrtime(time);
+                const ms = (diff[0] * NS_PER_SEC + diff[1]) / NS_TO_MS;
+
+                // Store request
+                res.slam.method = `${ req.method } ${ getRoute(req) }`;
+                res.slam.statusCode = res.statusCode;
+                res.slam.finished = res.finished;
+                res.slam.durationMs = ms;
+
+                // Log long requests
+                if (log_long_requests && obj.durationMs > long_req) console.log('Long request:', obj.method, obj.durationMs);
+
+                // Logging enabled
+                if (console_logging_enabled) console.log(res.slam);
+
+                // Create if not exists
                 if (!global.slamCounts[obj.method]) global.slamCounts[obj.method] = { count: 0, avgDurationMs: 0, statusCodes: {} };
 
                 if (!global.slamCounts[obj.method].statusCodes[obj.statusCode])
                     global.slamCounts[obj.method].statusCodes[obj.statusCode] = { count: 0, segments: {} };
 
+                // Stash previous
                 var prev = global.slamCounts[obj.method];
 
+                // Increment
                 global.slamCounts[obj.method].statusCodes[obj.statusCode].count++;
                 global.slamCounts[obj.method].count++;
 
+                // Compute avg request duration
                 var new_avg_dur = (obj.durationMs + (prev.avgDurationMs * prev.count)) / (prev.count + 1);
                 global.slamCounts[obj.method].avgDurationMs = new_avg_dur;
-
 
                 // Compute new segments
                 var segments = global.slamCounts[obj.method].statusCodes[obj.statusCode].segments;
 
+                // Create if not exists
                 if (!segments[obj.timeSegment]) segments[obj.timeSegment] = { count: 0, avgDurationMs: 0 };
 
+                // Store count and avg duration
                 prev = segments[obj.timeSegment];
                 new_avg_dur = (obj.durationMs + (prev.avgDurationMs * prev.count)) / (prev.count + 1);
 
@@ -83,39 +107,14 @@ module.exports = function (app) {
                 global.slamCounts[obj.method].statusCodes[obj.statusCode].segments = segments;
             }
 
-            res.on('close', function () {
-                const diff = process.hrtime(time);
-                const ms = (diff[0] * NS_PER_SEC + diff[1]) / NS_TO_MS;
-
-                res.slam.method = `${ req.method } ${ getRoute(req) }`;
-                res.slam.statusCode = res.statusCode;
-                res.slam.finished = res.finished;
-                res.slam.durationMs = ms;
-
-                setTimeout(function () {
-                    if (console_logging_enabled && !res.slam.logged) console.log(res.slam);
-                    if (!res.slam.logged) log(res.slam);
-                    res.slam.logged = true;
-                }, 100);
-            });
-
-            res.on('finish', function () {
-                const diff = process.hrtime(time);
-                const ms = (diff[0] * NS_PER_SEC + diff[1]) / NS_TO_MS;
-
-                res.slam.method = `${ req.method } ${ getRoute(req) }`;
-                res.slam.statusCode = res.statusCode;
-                res.slam.finished = res.finished;
-                res.slam.durationMs = ms;
-
-                if (console_logging_enabled && !res.slam.logged) console.log(res.slam);
-                if (!res.slam.logged) log(res.slam);
-                res.slam.logged = true;
-            });
-
+            res.on('finish', log);
+            res.on('close', log);
             next();
 
-        } catch(e) { next() }
+        } catch(e) {
+            console.log('Slam exception');
+            next()
+        }
 
     });
 
