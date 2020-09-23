@@ -65,6 +65,7 @@ module.exports = function (app) {
 
             // Log incoming parameters and types
             function logInfo (o) {
+                if (!o || typeof o !== 'object') return {};
                 let out = {};
 
                 Object.keys(o).forEach(k => {
