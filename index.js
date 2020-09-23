@@ -20,6 +20,7 @@ module.exports = function (app) {
             const NS_PER_SEC = 1e9;
             const NS_TO_MS = 1e6;
 
+            // Generate a pseudo-unique UUID
             function uuidv4 () {
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
                     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -27,19 +28,53 @@ module.exports = function (app) {
                 });
             }
 
+            // Get route name
             function getRoute (req) {
                 const route = req.route ? req.route.path : '';
                 const baseUrl = req.baseUrl ? req.baseUrl : '';
                 return route ? `${ baseUrl === '/' ? '' : baseUrl }${ route }` : 'unknown route'
             }
 
+            // Javascript timestamp to compressed segment
             function tsToSegment (ts) {
                 if (!ts) ts = + new Date();
                 return Math.floor(ts / (1000 * 60 * 5));
             }
 
+            // Compressed segment to Javascript timestamp
             function segmentToTs (seg) {
                 return seg * (1000 * 60 * 5);
+            }
+
+            // Fix value type
+            function fixValueType (v) {
+                if (v === 'undefined') v = undefined;
+                if (v === 'false') v = false;
+                if (v === 'null') v = null;
+                if (v === 'true') v = true;
+                if (v === 'NaN') v = NaN;
+
+                if ((+v) == v && v !== '') v = (+v);
+                return v;
+            }
+
+            // Return coerced type of
+            function typeOf (v) {
+                return typeof fixValueType(v);
+            }
+
+            // Log incoming parameters and types
+            function logInfo (o) {
+                let out = {};
+
+                Object.keys(o).forEach(k => {
+                    let type = typeOf(o[k]);
+                    if (Array.isArray(o[k])) type = 'array';
+
+                    out[k] = { namespace: k, type: type };
+                });
+
+                return out;
             }
 
             res.slam = { uuid: uuidv4(), timestamp: (+ new Date()), timeSegment: tsToSegment() };
@@ -105,6 +140,13 @@ module.exports = function (app) {
 
                 // Persist new segments to method / status code
                 global.slamCounts[obj.method].statusCodes[obj.statusCode].segments = segments;
+
+                // Append the last request params and types
+                global.slamCounts[obj.method].namespaces = {
+                    params: logInfo(req.params),
+                    query: logInfo(req.query),
+                    body: logInfo(req.body)
+                };
             }
 
             res.on('finish', log);
