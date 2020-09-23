@@ -32,11 +32,20 @@ You do not need to monitor your app to use this page. Simply visit the `/monitor
 Currently, you can pass an environment variable `HOSTNAME` to set the hostname of your apis (optional).
 
 
+## Dotenv Template
+```
+SLAM_MONITOR_PATH='/monitor'
+SLAM_PAGE_TITLE='API Monitor'
+SLAM_LOG_LONG_REQUESTS=true
+SLAM_MAX_REQUEST_LENGTH=5000
+SLAM_DEBUG=false
+```
+
 ## Todos
 
  * Make the monitoring page configurable
-   * Custom title
-   * Custom route
+   * [x] Custom title
+   * [x] Custom route
 
 
 ## Issues

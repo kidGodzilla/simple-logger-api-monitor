@@ -2,23 +2,28 @@
  * Simple Logger / API Monitor (SLAM) for Express
  */
 module.exports = function (app) {
+    const process = require('process');
+    const os = require('os');
+
+    try {
+        const routeName = process.env.SLAM_MONITOR_PATH || '/monitor';
+        const pageTitle = process.env.SLAM_PAGE_TITLE || 'API Monitor';
+    } catch(e){}
 
     // Middleware
     app.use(function (req, res, next) {
         if (!global.slamCounts) global.slamCounts = {}; // Create if not exists
 
         try {
-            // Todo: make these env variables
-            const console_logging_enabled = false;
-            const log_long_requests = true;
-            const long_req = 5000;
-
             // Setup
-            const process = require('process');
             const time = process.hrtime();
-            const os = require('os');
             const NS_PER_SEC = 1e9;
             const NS_TO_MS = 1e6;
+
+            // Environment Variables
+            const log_long_requests = process.env.SLAM_LOG_LONG_REQUESTS || true;
+            const console_logging_enabled = process.env.SLAM_DEBUG || false;
+            const long_req = process.env.SLAM_MAX_REQUEST_LENGTH || 5000;
 
             // Generate a pseudo-unique UUID
             function uuidv4 () {
@@ -166,7 +171,7 @@ module.exports = function (app) {
     });
 
     // Render the view
-    app.get('/monitor', function (req, res) {
-        res.send(`<html> <head> <title>API Monitor</title> <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/4.3.1/cosmo/bootstrap.min.css" /> <style type="text/css"> .pt-8 { padding-top: 110px; } .frappe-chart .x.axis text { display: none; } </style> </head> <body> <div class="container" style="margin-top:30px"> <h2 class="text-center">API Monitor</h2> <br/> <div class="charts"></div> </div> <script src="https://code.jquery.com/jquery-3.3.1.js"></script> <script src="https://cdn.jsdelivr.net/npm/frappe-charts@1.2.4/dist/frappe-charts.min.iife.js"></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script> <script> function segmentToTs(t){return 3e5*t}function tsToSegment(t){return t=t||+new Date,Math.floor(t/3e5)}function renderChart(t,a){var r=$('<div class="row"> <div class="col-md-10"> <div class="chart"></div> </div> <div class="col-md-1 align-middle pt-8"><strong class="reqs"></strong><strong> reqs.</strong> </div> <div class="col-md-1 align-middle pt-8"> <strong class="adur"></strong><strong>ms Avg.</strong> </div> </div>');r.find(".reqs").text(a.count),r.find(".adur").text(Math.round(a.avgDurationMs)),r.attr("data-k",t);for(var e={labels:[],datasets:[]},s=tsToSegment(),n=s-23,o=n;o<=s;o++){var i=moment(segmentToTs(o)).fromNow();e.labels.push(i)}for(var d in a.statusCodes){var c={name:d,chartType:"bar",values:[]};for(o=n;o<=s;o++){var l=0;try{l=a.statusCodes[d].segments[o].count}catch(t){}c.values.push(l)}e.datasets.push(c)}$(".container > .charts").append(r);new frappe.Chart(r.find(".chart")[0],{data:e,title:t,type:"bar",height:220,colors:["green"],barOptions:{stacked:!0,spaceRatio:.1},tooltipOptions:{formatTooltipX:function(t){return(t+"").toUpperCase()},formatTooltipY:function(t){return t+""}}})}function getData(){$.get("/slamCounts",function(t){for(var a in t&&$(".container > .charts").html(""),t){renderChart(a,t[a])}})}$(document).ready(function(){setInterval(getData,12e4),getData()}); </script> </body> </html>`);
+    app.get(routeName, function (req, res) {
+        res.send(`<html> <head> <title>API Monitor</title> <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/4.3.1/cosmo/bootstrap.min.css" /> <style type="text/css"> .pt-8 { padding-top: 110px } .frappe-chart .x.axis text { display: none } </style> </head> <body> <div class="container" style="margin-top:30px"> <h2 class="text-center">${ pageTitle }</h2> <br/> <div class="charts"></div> </div> <script src="https://code.jquery.com/jquery-3.3.1.js"></script> <script src="https://cdn.jsdelivr.net/npm/frappe-charts@1.2.4/dist/frappe-charts.min.iife.js"></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script> <script> function segmentToTs(t){return 3e5*t}function tsToSegment(t){return t=t||+new Date,Math.floor(t/3e5)}function renderChart(t,a){var r=$('<div class="row"> <div class="col-md-10"> <div class="chart"></div> </div> <div class="col-md-1 align-middle pt-8"><strong class="reqs"></strong><strong> reqs.</strong> </div> <div class="col-md-1 align-middle pt-8"> <strong class="adur"></strong><strong>ms Avg.</strong> </div> </div>');r.find(".reqs").text(a.count),r.find(".adur").text(Math.round(a.avgDurationMs)),r.attr("data-k",t);for(var e={labels:[],datasets:[]},s=tsToSegment(),n=s-23,o=n;o<=s;o++){var i=moment(segmentToTs(o)).fromNow();e.labels.push(i)}for(var d in a.statusCodes){var c={name:d,chartType:"bar",values:[]};for(o=n;o<=s;o++){var l=0;try{l=a.statusCodes[d].segments[o].count}catch(t){}c.values.push(l)}e.datasets.push(c)}$(".container > .charts").append(r);new frappe.Chart(r.find(".chart")[0],{data:e,title:t,type:"bar",height:220,colors:["green"],barOptions:{stacked:!0,spaceRatio:.1},tooltipOptions:{formatTooltipX:function(t){return(t+"").toUpperCase()},formatTooltipY:function(t){return t+""}}})}function getData(){$.get("/slamCounts",function(t){for(var a in t&&$(".container > .charts").html(""),t){renderChart(a,t[a])}})}$(document).ready(function(){setInterval(getData,12e4),getData()}); </script> </body> </html>`);
     });
 };
