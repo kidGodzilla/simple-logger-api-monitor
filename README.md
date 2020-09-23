@@ -29,8 +29,11 @@ You do not need to monitor your app to use this page. Simply visit the `/monitor
 
 ## Advanced
 
-Currently, you can pass an environment variable `HOSTNAME` to set the hostname of your apis (optional).
+Currently, you can pass an environment variable `HOSTNAME` or `SLAM_HOSTNAME` (namespace safe) to set the hostname of your apis (optional).
 
+You can also customize your monitor page title and path via environment variables.
+
+Additionally, you can enable or disable logging, especially of slow requests.
 
 ## Dotenv Template
 ```
