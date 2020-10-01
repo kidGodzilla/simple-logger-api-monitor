@@ -243,7 +243,7 @@ module.exports = function (app) {
                 
                 new frappe.Chart(r.find(".chart")[0], {
                     data: e,
-                    title: t,
+                    title: t + (nsStr ? (' - ' + nsStr) : ''),
                     type: "bar",
                     height: 220,
                     colors: ["green"],
