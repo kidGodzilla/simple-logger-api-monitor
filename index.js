@@ -177,15 +177,22 @@ module.exports = function (app) {
 
     app.get(routeName, function (req, res) {
         res.send(`
-<html>
+<html lang="en">
     <head>
-        <title>API Monitor</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="theme-color" content="#000000">
+        <title>${ pageTitle }</title>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/5.2.3/zephyr/bootstrap.min.css" />
         <style type="text/css">
             .pt-8 { padding-top: 110px }
             .frappe-chart .x.axis text { display: none }
-            text.title { font-size: 90%; font-weight: bolder; }
             .chart .chart-container { padding-top: 15px; }
+            text.title { font-size: 90%; font-weight: bolder; }
         </style>
     </head>
     <body>
