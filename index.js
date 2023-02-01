@@ -338,14 +338,14 @@ module.exports = function (app) {
                             return (t + "").toUpperCase();
                         },
                         formatTooltipY: function (t) {
-                            return (t || 0).toLocaleString() + "";
+                            return (t || 0).toLocaleString() + " req(s)";
                         },
                     },
                 });
                 
                 new frappe.Chart(r.find(".chart2")[0], {
                     data: f,
-                    title: 'Average Request Times (' + Math.round(a.avgDurationMs) + 'ms Average over ' + (a.count || 0).toLocaleString() + ' requests)',
+                    title: 'Average Request Times (' + (Math.round(a.avgDurationMs || 0)).toLocaleString() + 'ms Average over ' + (a.count || 0).toLocaleString() + ' requests)',
                     type: "line",
                     height: 220,
                     colors: ["green"],
@@ -358,7 +358,7 @@ module.exports = function (app) {
                             return (t + "").toUpperCase();
                         },
                         formatTooltipY: function (t) {
-                            return t + "ms";
+                            return (t || 0).toLocaleString() + "ms";
                         },
                     },
                 });
