@@ -180,10 +180,12 @@ module.exports = function (app) {
 <html>
     <head>
         <title>API Monitor</title>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/4.3.1/cosmo/bootstrap.min.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/5.2.3/zephyr/bootstrap.min.css" />
         <style type="text/css">
             .pt-8 { padding-top: 110px }
             .frappe-chart .x.axis text { display: none }
+            text.title { font-size: 90%; font-weight: bolder; }
+            .chart .chart-container { padding-top: 15px; }
         </style>
     </head>
     <body>
@@ -193,17 +195,92 @@ module.exports = function (app) {
             <div class="charts"></div>
         </div>
         <script src="https://code.jquery.com/jquery-3.3.1.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/frappe-charts@1.2.4/dist/frappe-charts.min.iife.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/frappe-charts@1.6.2/dist/frappe-charts.min.umd.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
         <script>
             function segmentToTs(t) { return 3e5 * t; }
             
             function tsToSegment(t) { return (t = t || +new Date()), Math.floor(t / 3e5); }
             
+            var status_codes = {
+                "100": "Continue",
+                "101": "Switching Protocols",
+                "102": "Processing",
+                "103": "Checkpoint",
+                "200": "OK",
+                "201": "Created",
+                "202": "Accepted",
+                "203": "Non-Authoritative Information",
+                "204": "No Content",
+                "205": "Reset Content",
+                "206": "Partial Content",
+                "207": "Multi-Status",
+                "208": "Already Reported",
+                "300": "Multiple Choices",
+                "301": "Moved Permanently",
+                "302": "Found",
+                "303": "See Other",
+                "304": "Not Modified",
+                "305": "Use Proxy",
+                "306": "Switch Proxy",
+                "307": "Temporary Redirect",
+                "308": "Permanent Redirect",
+                "400": "Bad Request",
+                "401": "Unauthorized",
+                "402": "Payment Required",
+                "403": "Forbidden",
+                "404": "Not Found",
+                "405": "Method Not Allowed",
+                "406": "Not Acceptable",
+                "407": "Proxy Authentication Required",
+                "408": "Request Time-out",
+                "409": "Conflict",
+                "410": "Gone",
+                "411": "Length Required",
+                "412": "Precondition Failed",
+                "413": "Request Entity Too Large",
+                "414": "Request-URI Too Long",
+                "415": "Unsupported Media Type",
+                "416": "Requested Range Not Satisfiable",
+                "417": "Expectation Failed",
+                "418": "I'm a teapot",
+                "421": "Unprocessable Entity",
+                "422": "Misdirected Request",
+                "423": "Locked",
+                "424": "Failed Dependency",
+                "426": "Upgrade Required",
+                "428": "Precondition Required",
+                "429": "Too Many Requests",
+                "431": "Request Header Fileds Too Large",
+                "451": "Unavailable For Legal Reasons",
+                "500": "Internal Server Error",
+                "501": "Not Implemented",
+                "502": "Bad Gateway",
+                "503": "Service Unavailable",
+                "504": "Gateway Timeout",
+                "505": "HTTP Version Not Supported",
+                "506": "Variant Also Negotiates",
+                "507": "Insufficient Storage",
+                "508": "Loop Detected",
+                "509": "Bandwidth Limit Exceeded",
+                "510": "Not Extended",
+                "511": "Network Authentication Required",
+                "1xx": "Informational",
+                "2xx": "Success",
+                "3xx": "Redirection",
+                "4xx": "Client Error",
+                "5xx": "Server Error"
+            };
+            
+            function statusCodeString(x) {
+                var y = status_codes[(x+'')];
+                return y ? ' (' + ( y ) + ')' : '';
+            }
+            
             function renderChart(t, a) {
-                var r = $('<div class="row"> <div class="col-md-10"> <div class="chart" title=""></div> </div> <div class="col-md-1 align-middle pt-8"><strong class="reqs"></strong><strong> reqs.</strong> </div> <div class="col-md-1 align-middle pt-8"> <strong class="adur"></strong><strong>ms Avg.</strong> </div> </div>');
+                var r = $('<div class="row"> <div class="col-md-12">  <div class="card bg-light mb-3"> <div class="chart" title=""></div> <div class="chart2" title=""></div> </div>  </div>    </div>'); //<div class="col-md-1 align-middle pt-8"><strong class="reqs"></strong><strong> reqs.</strong> </div>
                 
-                r.find('.reqs').text(a.count), r.find('.adur').text(Math.round(a.avgDurationMs)), r.attr('data-k', t);
+                r.attr('data-k', t); // r.find('.reqs').text(a.count), , r.find('.adur').text(Math.round(a.avgDurationMs)),
                 
                 var nsStr = '';
                 
@@ -222,21 +299,26 @@ module.exports = function (app) {
                 
                 r.find('.chart').attr('title', nsStr);
                 
-                for (var e = { labels: [], datasets: [] }, s = tsToSegment(), n = s - 23, o = n; o <= s; o++) {
+                for (var e = { labels: [], datasets: [] }, f = { labels: [], datasets: [] }, s = tsToSegment(), n = s - 23, o = n; o <= s; o++) {
                     var i = moment(segmentToTs(o)).fromNow();
                     e.labels.push(i);
+                    f.labels.push(i);
                 }
                 
                 for (var d in a.statusCodes) {
                     var c = { name: d, chartType: "bar", values: [] };
+                    var g = { name: d, chartType: "line", values: [] };
                     for (o = n; o <= s; o++) {
-                        var l = 0;
+                        var l = 0, m = 0;
                         try {
                             l = a.statusCodes[d].segments[o].count;
+                            m = a.statusCodes[d].segments[o].avgDurationMs;
                         } catch (t) {}
                         c.values.push(l);
+                        g.values.push(Math.round(m));
                     }
                     e.datasets.push(c);
+                    f.datasets.push(g);
                 }
                 
                 $(".container > .charts").append(r);
@@ -247,13 +329,36 @@ module.exports = function (app) {
                     type: "bar",
                     height: 220,
                     colors: ["green"],
-                    barOptions: { stacked: !0, spaceRatio: 0.1 },
+                    barOptions: { stacked: !0, spaceRatio: 0.2 },
+                    animate: false,
+                    truncateLegends: true,
+                    xAxisMode: 'tick',
                     tooltipOptions: {
                         formatTooltipX: function (t) {
                             return (t + "").toUpperCase();
                         },
                         formatTooltipY: function (t) {
-                            return t + "";
+                            return (t).toLocaleString() + "";
+                        },
+                    },
+                });
+                
+                new frappe.Chart(r.find(".chart2")[0], {
+                    data: f,
+                    title: 'Average Request Times (' + Math.round(a.avgDurationMs) + 'ms Average over ' + (a.count).toLocaleString() + ' requests)',
+                    type: "line",
+                    height: 220,
+                    colors: ["green"],
+                    barOptions: {  },
+                    animate: false,
+                    truncateLegends: true,
+                    xAxisMode: 'tick',
+                    tooltipOptions: {
+                        formatTooltipX: function (t) {
+                            return (t + "").toUpperCase();
+                        },
+                        formatTooltipY: function (t) {
+                            return t + "ms";
                         },
                     },
                 });
