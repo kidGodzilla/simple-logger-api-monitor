@@ -338,14 +338,14 @@ module.exports = function (app) {
                             return (t + "").toUpperCase();
                         },
                         formatTooltipY: function (t) {
-                            return (t).toLocaleString() + "";
+                            return (t || 0).toLocaleString() + "";
                         },
                     },
                 });
                 
                 new frappe.Chart(r.find(".chart2")[0], {
                     data: f,
-                    title: 'Average Request Times (' + Math.round(a.avgDurationMs) + 'ms Average over ' + (a.count).toLocaleString() + ' requests)',
+                    title: 'Average Request Times (' + Math.round(a.avgDurationMs) + 'ms Average over ' + (a.count || 0).toLocaleString() + ' requests)',
                     type: "line",
                     height: 220,
                     colors: ["green"],
