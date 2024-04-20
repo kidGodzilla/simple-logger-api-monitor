@@ -161,9 +161,21 @@ module.exports = function (app) {
 
     });
 
-    // Return the raw counts and stats
+    // Return the raw counts and stats (Now sorted in a non-compliant way)
     app.get('/slamCounts', function (req, res) {
-        res.json(global.slamCounts);
+        let counts = global.slamCounts;
+
+        // Convert object to array of objects
+        const arr = Object.entries(counts).map(([key, value]) => ({ key, ...value }));
+        arr.sort((a, b) => b.count - a.count);
+
+        let sortedObject = {};
+
+        arr.forEach(o => {
+            sortedObject[o.key] = o;
+        });
+
+        res.json(sortedObject);
     });
 
     // Render the view
