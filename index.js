@@ -29,10 +29,10 @@ module.exports = function (app) {
             }
 
             // Get route name
-            function getRoute(req) {
-                const route = req.route ? req.route.path : req.path;
-                const baseUrl = req.baseUrl || '';
-                return route ? `${baseUrl === '/' ? '' : baseUrl}${route}` : 'unknown route';
+            function getRoute (req) {
+                const route = req.route ? req.route.path : '';
+                const baseUrl = req.baseUrl ? req.baseUrl : '';
+                return route ? `${ baseUrl === '/' ? '' : baseUrl }${ route }` : 'unknown route'
             }
 
             // Javascript timestamp to compressed segment
