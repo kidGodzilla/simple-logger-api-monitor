@@ -4,6 +4,78 @@
 module.exports = function (app) {
     const process = require('process');
     const os = require('os');
+    const v8 = require('v8');
+
+    // Helper functions (moved to top level)
+    // Javascript timestamp to compressed segment
+    function tsToSegment (ts) {
+        if (!ts) ts = + new Date();
+        return Math.floor(ts / (1000 * 60 * 5));
+    }
+
+    // Compressed segment to Javascript timestamp
+    function segmentToTs (seg) {
+        return seg * (1000 * 60 * 5);
+    }
+
+    // Initialize system metrics storage
+    if (!global.slamSystemMetrics) {
+        global.slamSystemMetrics = {
+            memory: {},
+            cpu: {},
+            lastCpuUsage: process.cpuUsage()
+        };
+    }
+
+    // Function to collect system metrics
+    function collectSystemMetrics() {
+        const timeSegment = tsToSegment();
+        const memUsage = process.memoryUsage();
+        const cpuUsage = process.cpuUsage();
+        
+        // Calculate CPU percentage since last measurement
+        const cpuPercent = global.slamSystemMetrics.lastCpuUsage ? 
+            ((cpuUsage.user - global.slamSystemMetrics.lastCpuUsage.user) + 
+             (cpuUsage.system - global.slamSystemMetrics.lastCpuUsage.system)) / 1000000 : 0;
+        
+        global.slamSystemMetrics.lastCpuUsage = cpuUsage;
+
+        // Store memory metrics
+        if (!global.slamSystemMetrics.memory[timeSegment]) {
+            global.slamSystemMetrics.memory[timeSegment] = {
+                rss: memUsage.rss,
+                heapUsed: memUsage.heapUsed,
+                heapTotal: memUsage.heapTotal,
+                external: memUsage.external,
+                arrayBuffers: memUsage.arrayBuffers || 0,
+                timestamp: Date.now()
+            };
+        }
+
+        // Store CPU metrics
+        if (!global.slamSystemMetrics.cpu[timeSegment]) {
+            global.slamSystemMetrics.cpu[timeSegment] = {
+                user: cpuUsage.user,
+                system: cpuUsage.system,
+                percent: cpuPercent,
+                loadAverage: os.loadavg(),
+                timestamp: Date.now()
+            };
+        }
+
+        // Cleanup old segments (older than 2 hours)
+        const minSegment = timeSegment - 23;
+        Object.keys(global.slamSystemMetrics.memory).forEach(seg => {
+            if (parseInt(seg) < minSegment) {
+                delete global.slamSystemMetrics.memory[seg];
+            }
+        });
+        Object.keys(global.slamSystemMetrics.cpu).forEach(seg => {
+            if (parseInt(seg) < minSegment) {
+                delete global.slamSystemMetrics.cpu[seg];
+            }
+        });
+    }
 
     // Middleware
     app.use(function (req, res, next) {
@@ -20,6 +92,9 @@ module.exports = function (app) {
             const console_logging_enabled = process.env.SLAM_DEBUG ==='true';
             const long_req = process.env.SLAM_MAX_REQUEST_LENGTH || 5000;
 
+            // Collect system metrics on each request
+            collectSystemMetrics();
+
             // Generate a pseudo-unique UUID
             function uuidv4 () {
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -33,17 +108,6 @@ module.exports = function (app) {
                 const route = req.route ? req.route.path : '';
                 const baseUrl = req.baseUrl ? req.baseUrl : '';
                 return route ? `${ baseUrl === '/' ? '' : baseUrl }${ route }` : 'unknown route'
-            }
-
-            // Javascript timestamp to compressed segment
-            function tsToSegment (ts) {
-                if (!ts) ts = + new Date();
-                return Math.floor(ts / (1000 * 60 * 5));
-            }
-
-            // Compressed segment to Javascript timestamp
-            function segmentToTs (seg) {
-                return seg * (1000 * 60 * 5);
             }
 
             // Fix value type
@@ -155,7 +219,7 @@ module.exports = function (app) {
             next();
 
         } catch(e) {
-            console.log('Slam exception');
+            console.log('[Slam exception]', e);
             next()
         }
 
@@ -176,6 +240,178 @@ module.exports = function (app) {
         });
 
         res.json(sortedObject);
+    });
+
+    // Return system metrics (memory and CPU)
+    app.get('/slamSystemMetrics', function (req, res) {
+        const metrics = global.slamSystemMetrics || { memory: {}, cpu: {} };
+        
+        // Get current system info
+        const currentMemory = process.memoryUsage();
+        const currentCpu = process.cpuUsage();
+        const loadAvg = os.loadavg();
+        
+        // Calculate memory usage percentages and trends
+        const memoryTrend = Object.keys(metrics.memory).sort().slice(-5).map(seg => ({
+            segment: parseInt(seg),
+            timestamp: metrics.memory[seg].timestamp,
+            rss: Math.round(metrics.memory[seg].rss / 1024 / 1024), // MB
+            heapUsed: Math.round(metrics.memory[seg].heapUsed / 1024 / 1024), // MB
+            heapTotal: Math.round(metrics.memory[seg].heapTotal / 1024 / 1024), // MB
+            external: Math.round(metrics.memory[seg].external / 1024 / 1024), // MB
+        }));
+
+        const cpuTrend = Object.keys(metrics.cpu).sort().slice(-5).map(seg => ({
+            segment: parseInt(seg),
+            timestamp: metrics.cpu[seg].timestamp,
+            userTime: Math.round(metrics.cpu[seg].user / 1000), // ms
+            systemTime: Math.round(metrics.cpu[seg].system / 1000), // ms
+            percent: Math.round(metrics.cpu[seg].percent * 100) / 100,
+            loadAverage: metrics.cpu[seg].loadAverage
+        }));
+
+        res.json({
+            current: {
+                memory: {
+                    rss: Math.round(currentMemory.rss / 1024 / 1024), // MB
+                    heapUsed: Math.round(currentMemory.heapUsed / 1024 / 1024), // MB
+                    heapTotal: Math.round(currentMemory.heapTotal / 1024 / 1024), // MB
+                    external: Math.round(currentMemory.external / 1024 / 1024), // MB
+                    heapUtilization: Math.round((currentMemory.heapUsed / currentMemory.heapTotal) * 100)
+                },
+                cpu: {
+                    userTime: Math.round(currentCpu.user / 1000), // ms
+                    systemTime: Math.round(currentCpu.system / 1000), // ms
+                    loadAverage: loadAvg,
+                    cores: os.cpus().length
+                },
+                system: {
+                    uptime: Math.round(process.uptime()),
+                    platform: os.platform(),
+                    arch: os.arch(),
+                    nodeVersion: process.version,
+                    hostname: os.hostname()
+                }
+            },
+            trends: {
+                memory: memoryTrend,
+                cpu: cpuTrend
+            },
+            segments: {
+                memory: metrics.memory,
+                cpu: metrics.cpu
+            }
+        });
+    });
+
+    // Combined health endpoint
+    app.get('/slamHealth', function (req, res) {
+        const apiCounts = global.slamCounts || {};
+        const systemMetrics = global.slamSystemMetrics || { memory: {}, cpu: {} };
+        
+        // Calculate total requests and average response time
+        let totalRequests = 0;
+        let totalDuration = 0;
+        let errorCount = 0;
+        
+        Object.values(apiCounts).forEach(route => {
+            totalRequests += route.count;
+            totalDuration += route.avgDurationMs * route.count;
+            
+            Object.keys(route.statusCodes).forEach(statusCode => {
+                if (statusCode >= 400) {
+                    errorCount += route.statusCodes[statusCode].count;
+                }
+            });
+        });
+
+        const avgResponseTime = totalRequests > 0 ? totalDuration / totalRequests : 0;
+        const errorRate = totalRequests > 0 ? (errorCount / totalRequests) * 100 : 0;
+
+        // Get latest system metrics
+        const currentMemory = process.memoryUsage();
+        const loadAvg = os.loadavg();
+
+        // Calculate memory pressure based on actual V8 heap limits
+        const heapStats = v8.getHeapStatistics();
+        const heapLimitMB = Math.round(heapStats.heap_size_limit / 1024 / 1024);
+        const rssMB = Math.round(currentMemory.rss / 1024 / 1024);
+        const heapUsedMB = Math.round(currentMemory.heapUsed / 1024 / 1024);
+        const heapTotalMB = Math.round(currentMemory.heapTotal / 1024 / 1024);
+        const heapUtilization = Math.round((currentMemory.heapUsed / currentMemory.heapTotal) * 100);
+        
+        // Memory pressure indicators:
+        // 1. RSS > 80% of heap limit (approaching V8's memory limit)
+        // 2. Heap used > 75% of heap limit (getting close to V8 limit)
+        // 3. RSS growth trend (if we have historical data)
+        const rssThreshold = heapLimitMB * 0.8;
+        const heapUsedThreshold = heapLimitMB * 0.75;
+        const highMemoryUsage = rssMB > rssThreshold || heapUsedMB > heapUsedThreshold;
+        
+        // Check for memory growth trend
+        let memoryGrowthConcern = false;
+        const recentMemorySegments = Object.keys(systemMetrics.memory || {})
+            .sort()
+            .slice(-5)
+            .map(seg => systemMetrics.memory[seg]);
+            
+        if (recentMemorySegments.length >= 3) {
+            const oldestRss = recentMemorySegments[0].rss / 1024 / 1024;
+            const newestRss = recentMemorySegments[recentMemorySegments.length - 1].rss / 1024 / 1024;
+            // If memory has grown by more than 50% in recent segments, flag it
+            memoryGrowthConcern = (newestRss / oldestRss) > 1.5;
+        }
+
+        const memoryPressure = highMemoryUsage || memoryGrowthConcern;
+        const highErrorRate = errorRate > 5;
+        const highLoad = loadAvg[0] > os.cpus().length;
+
+        res.json({
+            timestamp: Date.now(),
+            api: {
+                totalRequests,
+                avgResponseTime: Math.round(avgResponseTime),
+                errorRate: Math.round(errorRate * 100) / 100,
+                errorCount,
+                routeCount: Object.keys(apiCounts).length
+            },
+            system: {
+                memory: {
+                    heapUsed: heapUsedMB,
+                    heapTotal: heapTotalMB,
+                    heapUtilization: heapUtilization,
+                    rss: rssMB,
+                    heapLimit: heapLimitMB,
+                    // Add more context for memory assessment
+                    memoryPressureReason: memoryPressure ? 
+                        (rssMB > rssThreshold ? `High RSS usage (${rssMB}MB > ${Math.round(rssThreshold)}MB limit)` : 
+                         heapUsedMB > heapUsedThreshold ? `High heap usage (${heapUsedMB}MB > ${Math.round(heapUsedThreshold)}MB limit)` :
+                         memoryGrowthConcern ? 'Memory growth detected' : 
+                         'Memory pressure detected') : null
+                },
+                cpu: {
+                    loadAverage: loadAvg,
+                    cores: os.cpus().length
+                },
+                uptime: Math.round(process.uptime())
+            },
+            health: {
+                status: (errorRate > 10 || memoryPressure || highLoad) ? 'warning' : 'healthy',
+                memoryPressure: memoryPressure,
+                highErrorRate: highErrorRate,
+                highLoad: highLoad,
+                // Add more detailed health info
+                details: {
+                    memoryStatus: rssMB > rssThreshold ? 'high' : rssMB > (rssThreshold * 0.6) ? 'moderate' : 'normal',
+                    memoryTrend: memoryGrowthConcern ? 'growing' : 'stable',
+                    heapLimitMB: heapLimitMB,
+                    thresholds: {
+                        rssWarning: Math.round(rssThreshold),
+                        heapWarning: Math.round(heapUsedThreshold)
+                    }
+                }
+            }
+        });
     });
 
     // Render the view
@@ -205,12 +441,116 @@ module.exports = function (app) {
             .frappe-chart .x.axis text { display: none }
             .chart .chart-container { padding-top: 15px; }
             text.title { font-size: 90%; font-weight: bolder; }
+            .health-status { 
+                padding: 15px; 
+                border-radius: 8px; 
+                margin-bottom: 20px; 
+                border-left: 4px solid;
+            }
+            .health-healthy { 
+                background-color: #d4edda; 
+                border-color: #28a745; 
+                color: #155724; 
+            }
+            .health-warning { 
+                background-color: #fff3cd; 
+                border-color: #ffc107; 
+                color: #856404; 
+            }
+            .health-critical { 
+                background-color: #f8d7da; 
+                border-color: #dc3545; 
+                color: #721c24; 
+            }
+            .metric-card {
+                background: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            .metric-value {
+                font-size: 1.5em;
+                font-weight: bold;
+                color: #495057;
+            }
+            .metric-label {
+                font-size: 0.9em;
+                color: #6c757d;
+                margin-bottom: 5px;
+            }
+            .system-charts {
+                margin-bottom: 30px;
+            }
         </style>
     </head>
     <body>
         <div class="container" style="margin-top: 30px;">
             <h2 class="text-center">${ pageTitle }</h2>
             <br>
+            
+            <!-- System Health Status -->
+            <div id="health-status" class="health-status health-healthy">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 id="health-title">System Status: <span id="health-text">Loading...</span></h5>
+                        <p id="health-details" class="mb-0">Checking system health...</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <small id="last-updated" class="text-muted">Last updated: --</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Metrics Overview -->
+            <div class="row system-charts">
+                <div class="col-md-3">
+                    <div class="metric-card text-center">
+                        <div class="metric-label">Memory Usage</div>
+                        <div class="metric-value" id="memory-usage">--</div>
+                        <small class="text-muted" id="memory-details">-- MB / -- MB</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="metric-card text-center">
+                        <div class="metric-label">CPU Load</div>
+                        <div class="metric-value" id="cpu-load">--</div>
+                        <small class="text-muted" id="cpu-details">-- cores</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="metric-card text-center">
+                        <div class="metric-label">API Requests</div>
+                        <div class="metric-value" id="total-requests">--</div>
+                        <small class="text-muted" id="avg-response">-- ms avg</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="metric-card text-center">
+                        <div class="metric-label">Error Rate</div>
+                        <div class="metric-value" id="error-rate">--%</div>
+                        <small class="text-muted" id="uptime">Uptime: --</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Charts -->
+            <div class="row system-charts">
+                <div class="col-md-6">
+                    <div class="card bg-light mb-3">
+                        <div class="card-header">Memory Usage Trend</div>
+                        <div id="memory-chart"></div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-light mb-3">
+                        <div class="card-header">CPU Load Trend</div>
+                        <div id="cpu-chart"></div>
+                    </div>
+                </div>
+            </div>
+
+            <h4>API Endpoint Metrics</h4>
             <div class="charts"></div>
         </div>
         <script src="https://code.jquery.com/jquery-3.3.1.js"></script>
@@ -383,6 +723,120 @@ module.exports = function (app) {
                 });
             }
             
+            function formatUptime(seconds) {
+                const days = Math.floor(seconds / 86400);
+                const hours = Math.floor((seconds % 86400) / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                
+                if (days > 0) return days + 'd ' + hours + 'h';
+                if (hours > 0) return hours + 'h ' + minutes + 'm';
+                return minutes + 'm';
+            }
+
+            function updateSystemMetrics() {
+                $.get('/slamHealth', function (health) {
+                    // Update health status
+                    const statusEl = $('#health-status');
+                    const statusText = $('#health-text');
+                    const statusDetails = $('#health-details');
+                    
+                    statusEl.removeClass('health-healthy health-warning health-critical');
+                    
+                    if (health.health.status === 'healthy') {
+                        statusEl.addClass('health-healthy');
+                        statusText.text('Healthy');
+                        statusDetails.text('All systems operating normally');
+                    } else {
+                        statusEl.addClass('health-warning');
+                        statusText.text('Warning');
+                        let issues = [];
+                        if (health.health.memoryPressure) {
+                            const reason = health.system.memory.memoryPressureReason || 'High memory usage';
+                            issues.push(reason);
+                        }
+                        if (health.health.highErrorRate) issues.push('High error rate');
+                        if (health.health.highLoad) issues.push('High CPU load');
+                        statusDetails.text('Issues detected: ' + issues.join(', '));
+                    }
+                    
+                    // Update metric cards - show RSS instead of heap percentage for more meaningful info
+                    $('#memory-usage').text(health.system.memory.rss + ' MB');
+                    $('#memory-details').text('RSS: ' + health.system.memory.rss + ' MB, Limit: ' + health.system.memory.heapLimit + ' MB');
+                    
+                    $('#cpu-load').text(health.system.cpu.loadAverage[0].toFixed(2));
+                    $('#cpu-details').text(health.system.cpu.cores + ' cores');
+                    
+                    $('#total-requests').text(health.api.totalRequests.toLocaleString());
+                    $('#avg-response').text(health.api.avgResponseTime + ' ms avg');
+                    
+                    $('#error-rate').text(health.api.errorRate + '%');
+                    $('#uptime').text('Uptime: ' + formatUptime(health.system.uptime));
+                    
+                    $('#last-updated').text('Last updated: ' + moment().format('HH:mm:ss'));
+                });
+
+                $.get('/slamSystemMetrics', function (metrics) {
+                    // Render memory chart
+                    if (metrics.trends.memory.length > 0) {
+                        const memoryData = {
+                            labels: metrics.trends.memory.map(m => moment(m.timestamp).fromNow()),
+                            datasets: [
+                                {
+                                    name: "Heap Used",
+                                    chartType: "line",
+                                    values: metrics.trends.memory.map(m => m.heapUsed)
+                                },
+                                {
+                                    name: "RSS",
+                                    chartType: "line", 
+                                    values: metrics.trends.memory.map(m => m.rss)
+                                }
+                            ]
+                        };
+
+                        new frappe.Chart("#memory-chart", {
+                            data: memoryData,
+                            type: "line",
+                            height: 200,
+                            colors: ["#007bff", "#28a745"],
+                            animate: false,
+                            tooltipOptions: {
+                                formatTooltipY: function (value) {
+                                    return value + " MB";
+                                }
+                            }
+                        });
+                    }
+
+                    // Render CPU chart
+                    if (metrics.trends.cpu.length > 0) {
+                        const cpuData = {
+                            labels: metrics.trends.cpu.map(c => moment(c.timestamp).fromNow()),
+                            datasets: [
+                                {
+                                    name: "Load Average",
+                                    chartType: "line",
+                                    values: metrics.trends.cpu.map(c => c.loadAverage[0].toFixed(2))
+                                }
+                            ]
+                        };
+
+                        new frappe.Chart("#cpu-chart", {
+                            data: cpuData,
+                            type: "line",
+                            height: 200,
+                            colors: ["#ffc107"],
+                            animate: false,
+                            tooltipOptions: {
+                                formatTooltipY: function (value) {
+                                    return value + " load";
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+
             function getData() {
                 $.get('/slamCounts', function (t) {
                     window._data = t;
@@ -393,7 +847,19 @@ module.exports = function (app) {
                 });
             }
             
-            $(document).ready(function () { setInterval(getData, 12e4), getData() });
+            $(document).ready(function () { 
+                // Update both system metrics and API data
+                function updateAll() {
+                    updateSystemMetrics();
+                    getData();
+                }
+                
+                // Update every 2 minutes
+                setInterval(updateAll, 12e4);
+                
+                // Initial load
+                updateAll();
+            });
         </script>
     </body>
 </html>
