@@ -16,8 +16,8 @@ module.exports = function (app) {
             const NS_TO_MS = 1e6;
 
             // Environment Variables
-            const log_long_requests = process.env.SLAM_LOG_LONG_REQUESTS==='true' || true;
-            const console_logging_enabled = process.env.SLAM_DEBUG==='true' || false;
+            const log_long_requests = process.env.SLAM_LOG_LONG_REQUESTS !== 'false';
+            const console_logging_enabled = process.env.SLAM_DEBUG ==='true';
             const long_req = process.env.SLAM_MAX_REQUEST_LENGTH || 5000;
 
             // Generate a pseudo-unique UUID
